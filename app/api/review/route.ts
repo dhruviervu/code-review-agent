@@ -253,6 +253,33 @@ function detectLanguage(code: string): DetectedLanguage {
   return topLanguage;
 }
 
+function looksLikeCode(input: string): boolean {
+  const trimmed = input.trim();
+
+  // Too short to be meaningful code
+  if (trimmed.length < 20) return false;
+
+  // Must have at least one line with 2+ words or symbols
+  const lines = trimmed.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return false;
+
+  // Check for code-like patterns — at least one must match
+  const codePatterns = [
+    /[{}\[\]();]/, // brackets, parens, semicolons
+    /\b(if|else|for|while|return|def|function|class|import|const|let|var|fn|func|public|private)\b/,
+    /\w+\s*\(.*\)/, // function calls
+    /\w+\s*=\s*\w+/, // assignments
+    /\/\/|\/\*|#\s*\w+/, // comments
+    /->/, // arrow operators
+    /::/, // scope operators
+  ];
+
+  const matchCount = codePatterns.filter((pattern) => pattern.test(trimmed)).length;
+
+  // Must match at least 2 code patterns
+  return matchCount >= 2;
+}
+
 function normalizeRequestedLanguage(language: string): string {
   const normalized = language.trim().toLowerCase();
   if (normalized === "c++" || normalized === "cpp") {
@@ -441,6 +468,13 @@ export async function POST(request: Request) {
   if (code.length > 10000) {
     return NextResponse.json(
       { error: "Code must be 10000 characters or fewer." },
+      { status: 400 }
+    );
+  }
+
+  if (!looksLikeCode(code)) {
+    return NextResponse.json(
+      { error: "This doesn't look like code. Please paste actual source code for review." },
       { status: 400 }
     );
   }

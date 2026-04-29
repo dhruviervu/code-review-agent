@@ -275,6 +275,13 @@ export default function Home() {
             .map((file) => `=== ${file.name} ===\n${file.content}`)
             .join("\n\n");
 
+    // Minimum length check
+    if (activeTab === "paste" && code.trim().length < 20) {
+      setErrorMessage("Please enter at least a few lines of code to review.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/review", {
         method: "POST",
