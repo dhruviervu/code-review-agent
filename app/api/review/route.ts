@@ -98,39 +98,159 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 };
 
 function detectLanguage(code: string): DetectedLanguage {
-  const source = code.toLowerCase();
+  const scores: Record<DetectedLanguage, number> = {
+    python: 0,
+    javascript: 0,
+    typescript: 0,
+    java: 0,
+    go: 0,
+    rust: 0,
+    ruby: 0,
+    php: 0,
+    "c++": 0,
+    unknown: 0,
+  };
 
-  const has = (...patterns: string[]) => patterns.some((pattern) => source.includes(pattern));
+  // Python signals
+  if (/^def\s+\w+\s*\(/m.test(code)) scores.python += 3;
+  if (/^class\s+\w+.*:/m.test(code)) scores.python += 3;
+  if (/^import\s+\w+/m.test(code)) scores.python += 2;
+  if (/^from\s+\w+\s+import/m.test(code)) scores.python += 3;
+  if (/elif\s+/.test(code)) scores.python += 3;
+  if (/^\s*print\s*\(/m.test(code)) scores.python += 2;
+  if (/__init__\s*\(/.test(code)) scores.python += 3;
+  if (/:\s*$\n\s+\S/m.test(code)) scores.python += 2;
+  if (/self\.\w+/.test(code)) scores.python += 3;
+  if (/#.*$/m.test(code)) scores.python += 1;
 
-  if (has("<?php", "echo ", "$")) {
-    return "php";
+  // JavaScript signals
+  if (/\bconsole\.log\s*\(/.test(code)) scores.javascript += 3;
+  if (/\brequire\s*\(\s*['"]/.test(code)) scores.javascript += 3;
+  if (/\bmodule\.exports\b/.test(code)) scores.javascript += 4;
+  if (/=>\s*\{/.test(code)) scores.javascript += 2;
+  if (/\bvar\s+\w+\s*=/.test(code)) scores.javascript += 2;
+  if (/\bdocument\.\w+/.test(code)) scores.javascript += 3;
+  if (/\bwindow\.\w+/.test(code)) scores.javascript += 3;
+  if (/\bPromise\s*\(/.test(code)) scores.javascript += 2;
+  if (/\.then\s*\(/.test(code)) scores.javascript += 2;
+  if (/\basync\s+function\b/.test(code)) scores.javascript += 2;
+
+  // TypeScript signals (check before JS to outscore it)
+  if (/\:\s*(string|number|boolean|void|any|never)\b/.test(code)) scores.typescript += 3;
+  if (/\binterface\s+\w+\s*\{/.test(code)) scores.typescript += 4;
+  if (/\btype\s+\w+\s*=/.test(code)) scores.typescript += 4;
+  if (/<\w+(\[\])?>/.test(code)) scores.typescript += 2;
+  if (/\benum\s+\w+\s*\{/.test(code)) scores.typescript += 4;
+  if (/\bas\s+(string|number|boolean|\w+Type)/.test(code)) scores.typescript += 3;
+  if (/\bReadonly</.test(code)) scores.typescript += 3;
+  if (/\bPartial</.test(code)) scores.typescript += 3;
+  if (/\bRecord</.test(code)) scores.typescript += 3;
+  if (/\:\s*\w+\[\]\s*[=;{]/.test(code)) scores.typescript += 2;
+
+  // Java signals
+  if (/\bpublic\s+(static\s+)?class\s+\w+/.test(code)) scores.java += 4;
+  if (/\bSystem\.out\.print/.test(code)) scores.java += 4;
+  if (/\bpublic\s+static\s+void\s+main/.test(code)) scores.java += 5;
+  if (/\bimport\s+java\./.test(code)) scores.java += 5;
+  if (/\bnew\s+\w+\s*\(/.test(code)) scores.java += 2;
+  if (/@Override\b/.test(code)) scores.java += 4;
+  if (/\bprivate\s+\w+\s+\w+\s*;/.test(code)) scores.java += 3;
+  if (/\bpublic\s+\w+\s+get\w+\s*\(\s*\)/.test(code)) scores.java += 3;
+  if (/\bthrows\s+\w+Exception/.test(code)) scores.java += 4;
+  if (/\bArrayList</.test(code)) scores.java += 4;
+
+  // Go signals
+  if (/^package\s+\w+/m.test(code)) scores.go += 5;
+  if (/^func\s+\w+\s*\(/m.test(code)) scores.go += 4;
+  if (/\bfmt\.(Println|Printf|Sprintf)\s*\(/.test(code)) scores.go += 5;
+  if (/\:\=\s*/.test(code)) scores.go += 3;
+  if (/\bgoroutine\b/.test(code)) scores.go += 5;
+  if (/\bchan\s+\w+/.test(code)) scores.go += 5;
+  if (/^import\s+\(/m.test(code)) scores.go += 3;
+  if (/\bdefer\s+\w+/.test(code)) scores.go += 4;
+  if (/\bgo\s+func\s*\(/.test(code)) scores.go += 5;
+  if (/\berr\s*\!\=\s*nil/.test(code)) scores.go += 4;
+
+  // Rust signals
+  if (/^fn\s+\w+\s*\(/m.test(code)) scores.rust += 4;
+  if (/\blet\s+mut\s+\w+/.test(code)) scores.rust += 4;
+  if (/\bprintln!\s*\(/.test(code)) scores.rust += 5;
+  if (/\bimpl\s+\w+/.test(code)) scores.rust += 4;
+  if (/\buse\s+std::/.test(code)) scores.rust += 5;
+  if (/\bmatch\s+\w+\s*\{/.test(code)) scores.rust += 3;
+  if (/=>\s*\w+/.test(code)) scores.rust += 2;
+  if (/\bOwned\b|\bBorrow\b|\bClone\b/.test(code)) scores.rust += 3;
+  if (/\b&mut\s+\w+/.test(code)) scores.rust += 4;
+  if (/\bResult</.test(code)) scores.rust += 3;
+
+  // Ruby signals
+  if (/^def\s+\w+/m.test(code)) scores.ruby += 3;
+  if (/\bend\s*$/.test(code)) scores.ruby += 3;
+  if (/\bputs\s+/.test(code)) scores.ruby += 4;
+  if (/\battr_accessor\b/.test(code)) scores.ruby += 5;
+  if (/\brequire\s+'/.test(code)) scores.ruby += 3;
+  if (/\bdo\s*\|/.test(code)) scores.ruby += 4;
+  if (/\|[\w,\s]+\|/.test(code)) scores.ruby += 3;
+  if (/\.each\s+do/.test(code)) scores.ruby += 4;
+  if (/\bnil\b/.test(code)) scores.ruby += 2;
+  if (/#.*$/m.test(code) && /\bend\b/.test(code)) scores.ruby += 2;
+
+  // PHP signals
+  if (/^<\?php/m.test(code)) scores.php += 6;
+  if (/\$\w+\s*=/.test(code)) scores.php += 3;
+  if (/\becho\s+/.test(code)) scores.php += 3;
+  if (/\bfunction\s+\w+\s*\(/.test(code) && /\$\w+/.test(code)) scores.php += 3;
+  if (/\b\$this->\w+/.test(code)) scores.php += 5;
+  if (/\barray\s*\(/.test(code)) scores.php += 3;
+  if (/\bforeach\s*\(/.test(code) && /\$\w+/.test(code)) scores.php += 4;
+  if (/->/.test(code) && /\$\w+/.test(code)) scores.php += 2;
+  if (/\bnew\s+\w+\s*\(/.test(code) && /\$\w+/.test(code)) scores.php += 2;
+
+  // C++ signals
+  if (/#include\s*</.test(code)) scores["c++"] += 4;
+  if (/\bstd::\w+/.test(code)) scores["c++"] += 4;
+  if (/\bcout\s*<</.test(code)) scores["c++"] += 5;
+  if (/\bcin\s*>>/.test(code)) scores["c++"] += 5;
+  if (/\bint\s+main\s*\(/.test(code)) scores["c++"] += 4;
+  if (/\bnamespace\s+\w+/.test(code)) scores["c++"] += 4;
+  if (/\btemplate\s*</.test(code)) scores["c++"] += 5;
+  if (/\bnew\s+\w+\[/.test(code)) scores["c++"] += 3;
+  if (/\bdelete\[\]/.test(code)) scores["c++"] += 5;
+  if (/\bvector</.test(code)) scores["c++"] += 4;
+
+  // Find highest scoring language
+  let topLanguage: DetectedLanguage = "unknown";
+  let topScore = 0;
+
+  for (const [lang, score] of Object.entries(scores)) {
+    if (lang === "unknown") continue;
+    if (score > topScore) {
+      topScore = score;
+      topLanguage = lang as DetectedLanguage;
+    }
   }
-  if (has("def ", "__init__", "elif ", "print(", "\nimport ")) {
-    return "python";
-  }
-  if (has("public class", "system.out", "import java", " void ")) {
-    return "java";
-  }
-  if (has("func ", "package ", "fmt.", ":=")) {
-    return "go";
-  }
-  if (has("fn ", "let mut", "println!", "impl ", "mod ")) {
-    return "rust";
-  }
-  if (has("interface ", "type ", ": string", ": number", ".tsx", "tsx")) {
-    return "typescript";
-  }
-  if (has("const ", "let ", "var ", "console.log", "=>", "require(")) {
+
+  // Require minimum confidence score of 4 to make a call
+  // Below that, too uncertain — return unknown
+  if (topScore < 4) return "unknown";
+
+  // TypeScript must outscore JavaScript by at least 3 points
+  // to avoid JS code with one type annotation being called TS
+  if (
+    topLanguage === "typescript" &&
+    scores.typescript - scores.javascript < 3
+  ) {
     return "javascript";
   }
-  if (has("#include", "int main", "std::", "cout")) {
-    return "c++";
-  }
-  if (has("def ", "puts ", " end", "require ", "attr_")) {
-    return "ruby";
+
+  // Python vs Ruby disambiguation — both use def and end-like patterns
+  if (topLanguage === "ruby" && scores.python > 0) {
+    if (/self\./.test(code) || /^from\s+\w+\s+import/m.test(code)) {
+      return "python";
+    }
   }
 
-  return "unknown";
+  return topLanguage;
 }
 
 function normalizeRequestedLanguage(language: string): string {
